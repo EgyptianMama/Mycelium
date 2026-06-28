@@ -1,0 +1,152 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap');
+
+:root {
+  /* Unified Theme */
+  --bg-color: #0f172a; /* Dark bluish background */
+  --surface-main: #f5ebd9; /* Beige for data/context cards */
+  --surface-light: #fcf9f2; /* Warm white for inner cards */
+  --accent-color: #d97736; /* Lightish brown/orange accent */
+  --accent-highlight: #e8a87c;
+  
+  --text-on-bg: #f8fafc; /* Crisp off-white text for dark background */
+  --text-on-surface: #1a1a1a; /* Dark text for beige cards */
+  --border-color: #1a1a1a; /* Near black brutalist borders */
+  
+  --border-width: 3px;
+  --shadow-offset: 6px;
+  
+  /* Grid settings */
+  --grid-color: rgba(248, 250, 252, 0.05);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  margin: 0;
+  font-family: 'Space Mono', monospace;
+  background-color: var(--bg-color);
+  color: var(--text-on-bg);
+  min-height: 100vh;
+  /* Dotted grid background */
+  background-image: 
+    radial-gradient(circle at center, var(--grid-color) 2px, transparent 2px);
+  background-size: 24px 24px;
+}
+
+/* Background Stars/Dots */
+.star {
+  position: absolute;
+  color: var(--accent-highlight);
+  font-size: 14px;
+  user-select: none;
+  z-index: -1;
+  opacity: 0.6;
+}
+
+/* Base brutalist container */
+.brutalist-card {
+  background-color: var(--surface-main);
+  border: var(--border-width) solid var(--border-color);
+  box-shadow: var(--shadow-offset) var(--shadow-offset) 0px var(--border-color);
+  color: var(--text-on-surface);
+  position: relative;
+}
+
+.brutalist-card-light {
+  background-color: var(--surface-light);
+  border: var(--border-width) solid var(--border-color);
+  color: var(--text-on-surface);
+}
+
+.brutalist-input {
+  background-color: var(--surface-light);
+  border: var(--border-width) solid var(--border-color);
+  color: var(--text-on-surface);
+  font-family: 'Space Mono', monospace;
+  padding: 0.75rem;
+  width: 100%;
+  outline: none;
+  margin-bottom: 1rem;
+}
+
+.brutalist-input:focus {
+  background-color: #ffffff;
+}
+
+.brutalist-button {
+  background-color: var(--accent-color);
+  border: var(--border-width) solid var(--border-color);
+  box-shadow: 4px 4px 0px var(--border-color);
+  color: var(--text-on-bg);
+  font-family: 'Space Mono', monospace;
+  font-weight: bold;
+  font-size: 1rem;
+  padding: 0.75rem 1.5rem;
+  cursor: pointer;
+  transition: transform 0.1s, box-shadow 0.1s;
+  width: 100%;
+}
+
+.brutalist-button:active {
+  transform: translate(4px, 4px);
+  box-shadow: 0px 0px 0px var(--border-color);
+}
+
+.brutalist-button.secondary {
+  background-color: var(--surface-light);
+  color: var(--text-on-surface);
+}
+
+/* Window Header Bar */
+.window-header {
+  border-bottom: var(--border-width) solid var(--border-color);
+  padding: 0.5rem 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: bold;
+  font-size: 0.8rem;
+  letter-spacing: 1px;
+}
+
+.window-controls {
+  display: flex;
+  gap: 6px;
+}
+
+.window-box {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border-color);
+  background: transparent;
+}
+.window-box.filled {
+  background: var(--text-on-surface);
+}
+
+/* Glitch/Outline Text */
+.text-outline {
+  color: var(--bg-color);
+  -webkit-text-stroke: 1px var(--text-on-bg);
+  text-shadow: 4px 4px 0px var(--accent-color), -1px -1px 0px var(--text-on-bg);
+  font-size: 4rem;
+  font-weight: 700;
+  letter-spacing: 4px;
+  margin: 0;
+  line-height: 1.1;
+}
+
+.badge {
+  background-color: var(--accent-color);
+  color: var(--text-on-bg);
+  border: 2px solid var(--border-color);
+  padding: 4px 8px;
+  font-size: 0.8rem;
+  font-weight: bold;
+  display: inline-block;
+  box-shadow: 2px 2px 0px var(--border-color);
+}
