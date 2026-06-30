@@ -58,7 +58,7 @@ export class GithubFetcher {
       const filename = pathParts[pathParts.length - 1];
       
       // Check for ignored directories
-      if (pathParts.some(part => this.IGNORED_DIRECTORIES.has(part))) return false;
+      if (pathParts.some((part: string) => this.IGNORED_DIRECTORIES.has(part))) return false;
       
       // Check for ignored extensions
       const ext = filename.substring(filename.lastIndexOf('.')).toLowerCase();
@@ -79,17 +79,27 @@ export class GithubFetcher {
   }
 
   /**
-   * Fetches all files concurrently or sequentially.
+   * Fetches all files concurrently in chunks to dramatically speed up ingestion.
    */
   async fetchFiles(owner: string, repo: string, filesToFetch: any[], branch: string) {
     const files = [];
-    for (const file of filesToFetch) {
-       try {
-         const content = await this.fetchFileContent(owner, repo, branch, file.path);
-         files.push({ path: file.path, content });
-       } catch (err) {
-         console.warn(`Failed to fetch ${file.path}`, err);
-       }
+    const chunkSize = 20; // Fetch 20 files at a time to prevent rate limiting
+    
+    for (let i = 0; i < filesToFetch.length; i += chunkSize) {
+      const chunk = filesToFetch.slice(i, i + chunkSize);
+      
+      const chunkPromises = chunk.map(async (file) => {
+        try {
+          const content = await this.fetchFileContent(owner, repo, branch, file.path);
+          return { path: file.path, content };
+        } catch (err) {
+          console.warn(`Failed to fetch ${file.path}`, err);
+          return null;
+        }
+      });
+      
+      const results = await Promise.all(chunkPromises);
+      files.push(...(results.filter(Boolean) as { path: string; content: string }[]));
     }
     return files;
   }

@@ -1,6 +1,9 @@
+import { GraphService, type FileEntity } from '../graph/GraphService';
+
 class IngestionEngine {
   private worker: Worker | null = null;
   private messageIdCounter = 0;
+  public activeGraphService: GraphService | null = null;
   
   private invokeWorker(type: string, payload?: any): Promise<any> {
     return new Promise((resolve, reject) => {
@@ -50,9 +53,14 @@ class IngestionEngine {
     }
     
     console.log('[IngestionEngine] Sending files to worker...');
-    const graph = await this.invokeWorker('PARSE', files);
-    console.log('[IngestionEngine] Received graph from worker:', graph);
-    return graph;
+    const fileEntities: FileEntity[] = await this.invokeWorker('PARSE', files);
+    console.log('[IngestionEngine] Received entities from worker, building graph...');
+    
+    const graphService = new GraphService();
+    graphService.buildGraph(fileEntities);
+    this.activeGraphService = graphService;
+    
+    return graphService;
   }
 }
 

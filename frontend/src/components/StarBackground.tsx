@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 const StarBackground = () => {
   const [stars, setStars] = useState<{ id: number; top: string; left: string; size: string }[]>([]);

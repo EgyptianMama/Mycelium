@@ -1,22 +1,33 @@
 import React, { useState } from 'react';
 import WindowCard from '../components/WindowCard';
 import { GithubFetcher } from '../core/ingestion/GithubFetcher';
-import { ingestionEngine } from '../core/ingestion/IngestionEngine.ts?v=3';
+import { ingestionEngine } from '../core/ingestion/IngestionEngine';
 import ForceGraph3D from 'react-force-graph-3d';
 import SpriteText from 'three-spritetext';
+import { aiEngine } from '../core/ai/AIEngine';
+import { useAIStore } from '../store/aiStore';
+import { ChatPanel } from '../components/ai/ChatPanel';
+import { CodeExplainer } from '../components/ai/CodeExplainer';
 
 const Dashboard = () => {
   const [repoUrl, setRepoUrl] = useState('');
   const [status, setStatus] = useState<'IDLE' | 'FETCHING' | 'PARSING (WEB WORKER)' | 'COMPLETE' | 'ERROR'>('IDLE');
   const [logs, setLogs] = useState<string[]>([]);
   const [graphData, setGraphData] = useState<any>(null);
+  const [graphStats, setGraphStats] = useState<any>(null);
+
+  const { isModelLoaded, downloadProgress, downloadText, activeProvider } = useAIStore();
+
+  React.useEffect(() => {
+    aiEngine.initialize();
+  }, []);
 
   // Interactivity states
   const [hoverNode, setHoverNode] = useState<any>(null);
   const [highlightNodes, setHighlightNodes] = useState(new Set());
   const [highlightLinks, setHighlightLinks] = useState(new Set());
   const [selectedNode, setSelectedNode] = useState<any>(null);
-  const fgRef = React.useRef<any>();
+  const fgRef = React.useRef<any>(null);
 
   const updateHighlight = () => {
     setHighlightNodes(new Set(highlightNodes));
@@ -56,11 +67,10 @@ const Dashboard = () => {
       return 'rgba(255,255,255,0.05)';
     }
     const isHovered = node === hoverNode;
-    const path = node.id || '';
-    if (path.endsWith('.ts') || path.endsWith('.tsx') || path.endsWith('.js') || path.endsWith('.jsx')) return isHovered ? '#ffffff' : '#00ffff';
-    if (path.endsWith('.css') || path.endsWith('.scss')) return isHovered ? '#ffffff' : '#ff00ff';
-    if (path.endsWith('.json') || path.endsWith('.md')) return isHovered ? '#ffffff' : '#aaaaaa';
-    return isHovered ? '#ffffff' : '#ff9900';
+    if (node.type === 'file') return isHovered ? '#ffffff' : '#00ffff';
+    if (node.type === 'function') return isHovered ? '#ffffff' : '#4af626';
+    if (node.type === 'class') return isHovered ? '#ffffff' : '#ff9900';
+    return isHovered ? '#ffffff' : '#aaaaaa';
   };
 
   const addLog = (msg: string) => {
@@ -72,6 +82,7 @@ const Dashboard = () => {
     setLogs([]);
     setStatus('FETCHING');
     setGraphData(null);
+    setGraphStats(null);
     
     try {
       addLog(`> Parsing URL: ${repoUrl}`);
@@ -91,12 +102,13 @@ const Dashboard = () => {
       setStatus('PARSING (WEB WORKER)');
       addLog('> Sending files to WebAssembly parsing engine...');
       
-      const graph = await ingestionEngine.parseRepository(filesToParse);
+      const graphService = await ingestionEngine.parseRepository(filesToParse);
+      const forceData = graphService.getForceGraphData();
       
-      // Cross-link nodes
-      graph.links.forEach((link: any) => {
-        const a = graph.nodes.find((n: any) => n.id === link.source);
-        const b = graph.nodes.find((n: any) => n.id === link.target);
+      // Cross-link nodes for hover effects
+      forceData.links.forEach((link: any) => {
+        const a: any = forceData.nodes.find((n: any) => n.id === link.source);
+        const b: any = forceData.nodes.find((n: any) => n.id === link.target);
         if (a && b) {
           !a.neighbors && (a.neighbors = []);
           !b.neighbors && (b.neighbors = []);
@@ -110,9 +122,11 @@ const Dashboard = () => {
         }
       });
       
-      setGraphData(graph);
+      setGraphData(forceData);
+      const stats = graphService.getStats();
+      setGraphStats(stats);
       setStatus('COMPLETE');
-      addLog(`> Ingestion complete! Graph contains ${graph.nodes.length} nodes and ${graph.links.length} edges.`);
+      addLog(`> Ingestion complete! ${stats.nodes} nodes (${stats.files} files, ${stats.functions} functions, ${stats.classes} classes) and ${stats.edges} edges.`);
       
     } catch (err: any) {
       console.error(err);
@@ -140,56 +154,156 @@ const Dashboard = () => {
       </h1>
 
       {status === 'COMPLETE' && graphData ? (
-        <div style={{ display: 'grid', gridTemplateColumns: '3fr 1fr', gap: '2rem' }}>
-          {/* Left Column: Graph */}
-          <div style={{ height: '70vh', border: 'var(--border-width) solid var(--border-color)', backgroundColor: 'var(--bg-color)' }}>
-            <ForceGraph3D
-              ref={fgRef}
-              graphData={graphData}
-              nodeLabel={(node: any) => node.id}
-              nodeColor={getNodeColor}
-              nodeVal={(node: any) => Math.min(Math.max((node.properties?.astNodeCount || 0) / 100, 1), 10)}
-              nodeRelSize={6}
-              linkColor={(link: any) => highlightLinks.has(link) ? '#4af626' : 'rgba(255,255,255,0.25)'}
-              linkWidth={(link: any) => highlightLinks.has(link) ? 2 : 0.5}
-              linkDirectionalParticles={(link: any) => highlightLinks.has(link) ? 4 : 0}
-              linkDirectionalParticleWidth={4}
-              linkDirectionalArrowLength={3.5}
-              linkDirectionalArrowRelPos={1}
-              onNodeHover={handleNodeHover}
-              onNodeClick={handleNodeClick}
-              backgroundColor="#0a0a0a"
-              nodeThreeObject={(node: any) => {
-                const sprite = new SpriteText(node.id.split('/').pop());
-                sprite.color = getNodeColor(node);
-                sprite.textHeight = 3;
-                return sprite;
-              }}
-              nodeThreeObjectExtend={true}
-            />
+        <div style={{ display: 'flex', gap: '2rem', height: '80vh' }}>
+          {/* Left Column: Chat */}
+          <div style={{ flex: '1', minWidth: '300px' }}>
+            <ChatPanel />
           </div>
 
-          {/* Right Column: Metadata */}
-          <div>
+          {/* Middle Column: Graph */}
+          <div style={{ flex: '2', display: 'flex', flexDirection: 'column' }}>
+            {graphStats && (
+              <div style={{
+                marginBottom: '1rem',
+                padding: '0.5rem 1rem',
+                backgroundColor: 'var(--surface-main)',
+                border: 'var(--border-width) solid var(--border-color)',
+                color: 'var(--text-on-surface)',
+                display: 'flex',
+                justifyContent: 'space-between',
+                fontFamily: "'Space Mono', monospace",
+                fontWeight: 'bold',
+                fontSize: '0.9rem'
+              }}>
+                <span>Nodes: {graphStats.nodes}</span>
+                <span style={{ color: '#00aaaa' }}>Files: {graphStats.files}</span>
+                <span style={{ color: '#22aa00' }}>Functions: {graphStats.functions}</span>
+                <span style={{ color: '#cc6600' }}>Classes: {graphStats.classes}</span>
+                <span>Edges: {graphStats.edges}</span>
+              </div>
+            )}
+            <div style={{ flex: 1, border: 'var(--border-width) solid var(--border-color)', backgroundColor: 'var(--bg-color)' }}>
+              <ForceGraph3D
+                ref={fgRef}
+                graphData={graphData}
+                nodeLabel={(node: any) => node.label || node.id}
+                nodeColor={getNodeColor}
+                nodeVal={(node: any) => {
+                  if (node.type === 'file') return Math.min(Math.max((node.astNodeCount || 0) / 100, 1), 10);
+                  if (node.type === 'function' || node.type === 'class') {
+                    const lines = Math.max((node.endLine || 0) - (node.startLine || 0), 1);
+                    return Math.min(Math.max(lines / 10, 1), 5);
+                  }
+                  return 1;
+                }}
+                nodeRelSize={6}
+                linkColor={(link: any) => highlightLinks.has(link) ? '#4af626' : 'rgba(255,255,255,0.25)'}
+                linkWidth={(link: any) => highlightLinks.has(link) ? 2 : 0.5}
+                linkDirectionalParticles={(link: any) => highlightLinks.has(link) ? 4 : 0}
+                linkDirectionalParticleWidth={4}
+                linkDirectionalArrowLength={3.5}
+                linkDirectionalArrowRelPos={1}
+                onNodeHover={handleNodeHover}
+                onNodeClick={handleNodeClick}
+                backgroundColor="#0a0a0a"
+                nodeThreeObject={(node: any) => {
+                  // PERFORMANCE OPTIMIZATION:
+                  // Rendering thousands of SpriteTexts crashes the browser due to WebGL texture limits.
+                  // Only render text for files or actively hovered nodes.
+                  if (node.type === 'file' || highlightNodes.has(node)) {
+                    const sprite = new SpriteText(node.label || node.id.split('/').pop());
+                    sprite.color = getNodeColor(node);
+                    sprite.textHeight = node.type === 'file' ? 4 : 2.5;
+                    (sprite as any).position.y = node.type === 'file' ? 12 : 6;
+                    return sprite;
+                  }
+                  return null;
+                }}
+                nodeThreeObjectExtend={true}
+              />
+            </div>
+          </div>
+
+          {/* Right Column: Metadata & AI */}
+          <div style={{ flex: '1', display: 'flex', flexDirection: 'column', gap: '2rem', minWidth: '300px' }}>
             <WindowCard title="NODE_METADATA" light>
               {selectedNode ? (
                 <div style={{ wordBreak: 'break-all', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                  <h3 style={{ color: 'var(--accent-primary)', fontSize: '1.2rem', fontWeight: 'bold' }}>
-                    {selectedNode.id.split('/').pop()}
+                  <h3 style={{ color: 'var(--accent-color)', fontSize: '1.2rem', fontWeight: 'bold' }}>
+                    {selectedNode.label || selectedNode.id.split('/').pop()}
                   </h3>
                   
                   <div>
+                    <div style={{ fontSize: '0.8rem', opacity: 0.8, marginBottom: '0.2rem' }}>TYPE</div>
+                    <div style={{ fontFamily: "'Space Mono', monospace", fontSize: '0.9rem', color: getNodeColor(selectedNode), fontWeight: 'bold' }}>
+                      {(selectedNode.type || 'UNKNOWN').toUpperCase()}
+                    </div>
+                  </div>
+
+                  <div>
                     <div style={{ fontSize: '0.8rem', opacity: 0.8, marginBottom: '0.2rem' }}>PATH</div>
-                    <div style={{ fontFamily: "'Space Mono', monospace", fontSize: '0.9rem' }}>{selectedNode.id}</div>
+                    <div style={{ fontFamily: "'Space Mono', monospace", fontSize: '0.9rem' }}>{selectedNode.path || selectedNode.id}</div>
                   </div>
                   
+                  {selectedNode.type === 'function' && (
+                    <>
+                      <div>
+                        <div style={{ fontSize: '0.8rem', opacity: 0.8, marginBottom: '0.2rem' }}>PARAMS</div>
+                        <div style={{ fontFamily: "'Space Mono', monospace", fontSize: '0.9rem' }}>
+                          {selectedNode.params?.length > 0 ? selectedNode.params.join(', ') : 'none'}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.8rem', opacity: 0.8, marginBottom: '0.2rem' }}>LINES</div>
+                        <div style={{ fontFamily: "'Space Mono', monospace", fontSize: '0.9rem' }}>
+                          {selectedNode.startLine} - {selectedNode.endLine} ({Math.max((selectedNode.endLine || 0) - (selectedNode.startLine || 0), 1)} lines)
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: '0.8rem', opacity: 0.8, marginBottom: '0.2rem' }}>FLAGS</div>
+                        <div style={{ fontFamily: "'Space Mono', monospace", fontSize: '0.9rem', display: 'flex', gap: '0.5rem' }}>
+                          {selectedNode.isExported && <span className="badge">EXPORTED</span>}
+                          {selectedNode.isAsync && <span className="badge">ASYNC</span>}
+                          {!selectedNode.isExported && !selectedNode.isAsync && <span style={{ opacity: 0.5 }}>none</span>}
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {selectedNode.type === 'class' && (
+                    <>
+                      {selectedNode.superClass && (
+                        <div>
+                          <div style={{ fontSize: '0.8rem', opacity: 0.8, marginBottom: '0.2rem' }}>EXTENDS</div>
+                          <div style={{ fontFamily: "'Space Mono', monospace", fontSize: '0.9rem' }}>
+                            {selectedNode.superClass}
+                          </div>
+                        </div>
+                      )}
+                      <div>
+                        <div style={{ fontSize: '0.8rem', opacity: 0.8, marginBottom: '0.2rem' }}>METHODS ({selectedNode.methods?.length || 0})</div>
+                        <div style={{ fontFamily: "'Space Mono', monospace", fontSize: '0.9rem', maxHeight: '150px', overflowY: 'auto' }}>
+                          {selectedNode.methods?.map((m: any, i: number) => (
+                            <div key={i} style={{ marginBottom: '0.2rem' }}>
+                              - {m.name}({m.params?.join(', ')})
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                  
                   <div>
-                    <div style={{ fontSize: '0.8rem', opacity: 0.8, marginBottom: '0.2rem' }}>PROPERTIES</div>
+                    <div style={{ fontSize: '0.8rem', opacity: 0.8, marginBottom: '0.2rem' }}>CONNECTIONS</div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', fontFamily: "'Space Mono', monospace" }}>
-                      <div>AST Nodes:</div>
-                      <div style={{ textAlign: 'right', color: '#4af626' }}>{selectedNode.properties?.astNodeCount || 0}</div>
-                      <div>Connections:</div>
+                      <div>Neighbors:</div>
                       <div style={{ textAlign: 'right', color: '#4af626' }}>{selectedNode.neighbors?.length || 0}</div>
+                      {selectedNode.type === 'file' && (
+                        <>
+                          <div>AST Nodes:</div>
+                          <div style={{ textAlign: 'right', color: '#4af626' }}>{selectedNode.astNodeCount || 0}</div>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -199,6 +313,8 @@ const Dashboard = () => {
                 </div>
               )}
             </WindowCard>
+
+            <CodeExplainer selectedNode={selectedNode} />
           </div>
         </div>
       ) : (
@@ -229,13 +345,30 @@ const Dashboard = () => {
                 onClick={handleIngest}
                 disabled={status === 'FETCHING' || status === 'PARSING (WEB WORKER)'}
                 style={{
-                  backgroundColor: status === 'FETCHING' || status === 'PARSING (WEB WORKER)' ? 'var(--accent-primary)' : 'var(--accent-primary)',
+                  backgroundColor: status === 'FETCHING' || status === 'PARSING (WEB WORKER)' ? 'var(--accent-color)' : 'var(--accent-color)',
                   color: 'white',
                   cursor: status === 'FETCHING' || status === 'PARSING (WEB WORKER)' ? 'wait' : 'pointer'
                 }}
               >
                 {status === 'FETCHING' || status === 'PARSING (WEB WORKER)' ? 'WORKING...' : 'BEGIN INGESTION'}
               </button>
+
+              <div style={{ marginTop: '1rem', padding: '1rem', border: 'var(--border-width) solid var(--border-color)', backgroundColor: 'var(--surface-main)' }}>
+                <h3 style={{ fontSize: '1rem', marginBottom: '0.5rem', fontWeight: 'bold' }}>AI ENGINE STATUS</h3>
+                <div style={{ fontSize: '0.8rem', fontFamily: "'Space Mono', monospace" }}>
+                  Provider: <span style={{ color: 'var(--accent-color)' }}>{activeProvider.toUpperCase()}</span>
+                  <br />
+                  Status: {isModelLoaded ? <span style={{ color: '#4af626' }}>READY</span> : <span style={{ color: '#ff9900' }}>LOADING...</span>}
+                  {!isModelLoaded && activeProvider === 'webllm' && (
+                    <div style={{ marginTop: '0.5rem' }}>
+                      <div style={{ height: '4px', backgroundColor: 'var(--bg-color)', width: '100%', marginBottom: '0.2rem' }}>
+                        <div style={{ height: '100%', backgroundColor: 'var(--accent-color)', width: `${downloadProgress * 100}%` }} />
+                      </div>
+                      <div style={{ opacity: 0.7, fontSize: '0.7rem' }}>{downloadText}</div>
+                    </div>
+                  )}
+                </div>
+              </div>
 
               {(status !== 'IDLE' || logs.length > 0) && (
                 <div style={{
