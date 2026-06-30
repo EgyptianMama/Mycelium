@@ -1,6 +1,6 @@
-# 👁️ RepoLens
+# 👁️ Mycelium
 
-RepoLens is a **privacy-first, local-first codebase visualizer and AI assistant** that runs entirely within the user's web browser. By leveraging WebAssembly and WebGPU, RepoLens parses complex project repositories, builds active dependency graphs, and executes large language model (LLM) inference locally on the client's GPU—requiring zero cloud server compute costs and guaranteeing enterprise-grade source code privacy.
+Mycelium is a **local-first codebase visualizer and AI assistant** that runs entirely within the user's web browser. By leveraging WebAssembly and WebGPU, Mycelium parses complex project repositories, builds active dependency graphs, and executes large language model (LLM) inference locally on the client's GPU—requiring zero cloud server compute costs and guaranteeing enterprise-grade source code privacy.
 
 ---
 
